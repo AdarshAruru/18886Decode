@@ -1,131 +1,123 @@
 package org.firstinspires.ftc.teamcode.atlatl_26.teleOp;
 
-import com.qualcomm.robotcore.eventloop.opmode.OpMode;
+import com.qualcomm.robotcore.eventloop.opmode.LinearOpMode;
 import com.qualcomm.robotcore.eventloop.opmode.TeleOp;
 import com.qualcomm.robotcore.hardware.DcMotor;
 import com.qualcomm.robotcore.hardware.DcMotorSimple;
+import com.qualcomm.robotcore.hardware.Servo;
 
-@TeleOp
-public class DT_TeleOpTest extends OpMode {
+@TeleOp(name = "DT_TeleOpTest", group = "Atlatl")
+public class DT_TeleOpTest extends LinearOpMode {
 
-    // Initializing/making motor names
-    DcMotor leftFront, leftBack, rightFront, rightBack;
+    // ---------------- DRIVE MOTORS ----------------
+    private DcMotor frontLeftMotor, backLeftMotor, frontRightMotor, backRightMotor;
 
-    //Initialize Variables
-    double maxSpeed = 1.0;
+    // ---------------- INTAKE / OUTTAKE ----------------
+    private DcMotor intake, outtakeTop, outtakeBottom;
 
-    /*
-    (Button) Initialize Period, before you press start on your program.
-     */
-    public void init() {
+    // ---------------- SERVO ----------------
+    private Servo myServo;
+    private double servoDownPos = 0.0;
+    private double servoUpPos = 0.3;
+    private boolean servoIsUp = false; // track current servo state
 
-        //set hardware map names (aka what the controller understands)
-        leftFront = hardwareMap.get(DcMotor.class, "leftFront");
-        leftBack = hardwareMap.get(DcMotor.class, "leftBack");
-        rightFront = hardwareMap.get(DcMotor.class, "rightFront");
-        rightBack = hardwareMap.get(DcMotor.class, "rightBack");
+    // ---------------- OUTTAKE VARIABLES ----------------
+    private double intakePower = 1;
+    private double outtakePowerTop = 0.20;
+    private double outtakePowerBottom = 0.55;
+    private double powerStep = 0.1;
 
-        // Motor power goes from -maxSpeed -> maxSpeed
-        // Sets motor direction. Says which direction the motor will turn when given full power of maxSpeed
-        leftFront.setDirection(DcMotorSimple.Direction.REVERSE);
-        rightBack.setDirection(DcMotorSimple.Direction.REVERSE);
+    // ---------------- BUTTON TRACKERS ----------------
+    private boolean prevY = false;
+    private boolean prevA = false;
+    private boolean prevX = false;
 
-        // When no power (aka no joysticks moving (idle) ), robot should brake on stop
-        leftFront.setZeroPowerBehavior(DcMotor.ZeroPowerBehavior.BRAKE);
-        leftBack.setZeroPowerBehavior(DcMotor.ZeroPowerBehavior.BRAKE);
-        rightFront.setZeroPowerBehavior(DcMotor.ZeroPowerBehavior.BRAKE);
-        rightBack.setZeroPowerBehavior(DcMotor.ZeroPowerBehavior.BRAKE);
+    @Override
+    public void runOpMode() throws InterruptedException {
+        // ----- DRIVE MOTORS -----
+        frontLeftMotor = hardwareMap.get(DcMotor.class, "leftFront");
+        backLeftMotor = hardwareMap.get(DcMotor.class, "leftBack");
+        frontRightMotor = hardwareMap.get(DcMotor.class, "rightFront");
+        backRightMotor = hardwareMap.get(DcMotor.class, "rightBack");
+
+        // Reverse side motors if needed
+        frontRightMotor.setDirection(DcMotorSimple.Direction.REVERSE);
+        backRightMotor.setDirection(DcMotorSimple.Direction.REVERSE);
+        frontLeftMotor.setDirection(DcMotorSimple.Direction.FORWARD);
+
+        // ----- INTAKE/OUTTAKE -----
+        intake = hardwareMap.get(DcMotor.class, "intake");
+        outtakeTop = hardwareMap.get(DcMotor.class, "outtakeTop");
+        outtakeBottom = hardwareMap.get(DcMotor.class, "outtakeBottom");
+
+        intake.setDirection(DcMotorSimple.Direction.FORWARD);
+        outtakeTop.setDirection(DcMotorSimple.Direction.REVERSE);
+        outtakeBottom.setDirection(DcMotorSimple.Direction.FORWARD);
+
+        intake.setZeroPowerBehavior(DcMotor.ZeroPowerBehavior.BRAKE);
+
+        // ----- SERVO -----
+        myServo = hardwareMap.get(Servo.class, "myServo");
+        myServo.setPosition(servoDownPos); // start down and stay there during init
+        servoIsUp = false;
+
+        waitForStart();
+        if (isStopRequested()) return;
+
+        while (opModeIsActive()) {
+
+            // ========== GAMEPAD 1: DRIVE ==========
+            double y = -gamepad1.left_stick_y; // forward/back
+            double x = gamepad1.left_stick_x * 1.1; // strafe
+            double rx = gamepad1.right_stick_x; // turn
+
+            double denominator = Math.max(Math.abs(y) + Math.abs(x) + Math.abs(rx), 1);
+            double frontLeftPower = (y + x + rx) / denominator;
+            double backLeftPower = (y - x + rx) / denominator;
+            double frontRightPower = (y - x - rx) / denominator;
+            double backRightPower = (y + x - rx) / denominator;
+
+            frontLeftMotor.setPower(frontLeftPower);
+            backLeftMotor.setPower(backLeftPower);
+            frontRightMotor.setPower(frontRightPower);
+            backRightMotor.setPower(backRightPower);
+
+            // ========== GAMEPAD 2: INTAKE/OUTTAKE ==========
+            if (gamepad2.left_trigger > 0.1) {
+                intake.setPower(intakePower);
+                outtakeTop.setPower(outtakePowerTop);
+                outtakeBottom.setPower(outtakePowerBottom);
+            } else {
+                intake.setPower(0);
+                outtakeTop.setPower(0);
+                outtakeBottom.setPower(0);
+            }
+
+            // Adjust outtake power with Y/A on gamepad2
+            if (gamepad2.y && !prevY) {
+                outtakePowerTop = Math.min(outtakePowerTop + powerStep, 1.0);
+                outtakePowerBottom = Math.min(outtakePowerBottom + powerStep, 1.0);
+            }
+            if (gamepad2.a && !prevA) {
+                outtakePowerTop = Math.max(outtakePowerTop - powerStep, 0.0);
+                outtakePowerBottom = Math.max(outtakePowerBottom - powerStep, 0.0);
+            }
+
+            prevY = gamepad2.y;
+            prevA = gamepad2.a;
+
+            // ========== GAMEPAD 2: SERVO TOGGLE ==========
+            if (gamepad2.x && !prevX) {
+                servoIsUp = !servoIsUp; // toggle the state
+
+                if (servoIsUp) {
+                    myServo.setPosition(servoUpPos);
+                } else {
+                    myServo.setPosition(servoDownPos);
+                }
+            }
+
+            prevX = gamepad2.x;
+        }
     }
-
-    /*
-    (Button) What happens when you press Start/Play
-    You constantly update all your code
-    Basically just keep all your code over here
-     */
-    public void loop() {
-        Drive();
-    }
-
-    /*
-    Left Joystick ---------
-        1. Up/Down - Robot goes forward, and backwards | all motors maxSpeed power, all motors -maxSpeed power
-        2. Left/Right:
-            a. Robot strafes left | (rightFront, leftBack maxSpeed) & (rightBack, leftFront -maxSpeed)
-            b. Robot strafes right | (rightFront, leftBack -maxSpeed) & (rightBack, leftFront maxSpeed)
-
-    Right Joystick ---------
-        3. Turn:
-            a. Robot strafes left | (rightFront, leftBack maxSpeed) & (rightBack, leftFront -maxSpeed)
-            b. Robot strafes left | (rightFront, leftBack -maxSpeed) & (rightBack, leftFront maxSpeed)
-     */
-    private void Drive() {
-        //Forward - If left joystick y is greater than 0,
-        //Make robot go forward by setting positive power to all motors
-        if (gamepad1.left_stick_y > 0) {
-            leftFront.setPower(maxSpeed);
-            leftBack.setPower(maxSpeed);
-            rightFront.setPower(maxSpeed);
-            rightBack.setPower(maxSpeed);
-        }
-
-        //Backward - If left joystick y is less than 0,
-        //Make robot go backward by setting negative power to all motors
-        else if (gamepad1.left_stick_y < 0) {
-            leftFront.setPower(-maxSpeed);
-            leftBack.setPower(-maxSpeed);
-            rightFront.setPower(-maxSpeed);
-            rightBack.setPower(-maxSpeed);
-        }
-
-        //Strafe left - If left joystick x is less than 0,
-        //Make robot go left by setting negative power to leftFront and rightBack motors
-        //And setting positive power to leftBack and rightFront
-        else if (gamepad1.left_stick_x < 0) {
-            leftFront.setPower(-maxSpeed);
-            leftBack.setPower(maxSpeed);
-            rightFront.setPower(-maxSpeed);
-            rightBack.setPower(maxSpeed);
-        }
-
-        //Strafe right - If left joystick x is more than 0,
-        //Make robot go right by setting positive power to leftBack and rightFront motors
-        //And setting positive power to leftFront and rightBack
-        else if (gamepad1.left_stick_x > 0) {
-            leftFront.setPower(maxSpeed);
-            leftBack.setPower(-maxSpeed);
-            rightFront.setPower(maxSpeed);
-            rightBack.setPower(-maxSpeed);
-        }
-
-        //Turn Left - If right joystick x is less than 0,
-        //Make robot go left by setting positive power to rightBack and rightFront motors
-        //And setting negative power to leftFront and leftBack
-        else if (gamepad1.right_stick_x < 0) {
-            leftFront.setPower(-maxSpeed);
-            leftBack.setPower(-maxSpeed);
-            rightFront.setPower(maxSpeed);
-            rightBack.setPower(maxSpeed);
-        }
-
-        //Turn Right - If right joystick x is more than 0,
-        //Make robot go right by setting negative power to rightBack and rightFront motors
-        //And setting positive power to leftFront and leftBack
-        else if (gamepad1.right_stick_x > 0) {
-            leftFront.setPower(maxSpeed);
-            leftBack.setPower(maxSpeed);
-            rightFront.setPower(-maxSpeed);
-            rightBack.setPower(-maxSpeed);
-        }
-
-        // If no joysticks moving, idle motors
-        else {
-            leftFront.setPower(0);
-            leftBack.setPower(0);
-            rightFront.setPower(0);
-            rightBack.setPower(0);
-        }
-
-
-    }
-
 }
